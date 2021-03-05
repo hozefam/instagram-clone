@@ -1,33 +1,61 @@
 /* eslint-disable no-unused-vars */
 import React, { useContext, useState, useEffect } from 'react';
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useHistory, useRouteMatch } from 'react-router-dom';
 import FirebaseContext from '../context/firebase';
 import * as ROUTES from '../constants/routes';
+import { doesUsernameExist } from '../services/firebase';
 
-const Login = () => {
+const SignUp = () => {
   const history = useHistory();
   const { firebase } = useContext(FirebaseContext);
 
+  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
 
   const [errorMessage, setErrorMessage] = useState('');
   const isInvalid = password === '' || emailAddress === '';
 
-  const handleLogin = async (event) => {
+  const handleSignUp = async (event) => {
     event.preventDefault();
-    try {
-      await firebase.auth().signInWithEmailAndPassword(emailAddress, password);
-      history.push(ROUTES.DASHBOARD);
-    } catch (err) {
-      setEmailAddress('');
-      setPassword('');
-      setErrorMessage(err.message);
+
+    const usernameExists = await doesUsernameExist(username);
+
+    if (!usernameExists) {
+      try {
+        const createdUserResult = await firebase
+          .auth()
+          .createUserWithEmailAndPassword(emailAddress, password);
+
+        await createdUserResult.user.updateProfile({
+          displayName: username
+        });
+
+        await firebase.firestore().collection('users').add({
+          userId: createdUserResult.user.uid,
+          username: username.toLowerCase(),
+          fullName,
+          emailAddress: emailAddress.toLowerCase(),
+          follwing: [],
+          dateCreated: Date.now()
+        });
+
+        history.push(ROUTES.DASHBOARD);
+      } catch (error) {
+        setFullName('');
+        setEmailAddress('');
+        setPassword('');
+        setUsername('');
+        setErrorMessage(error.message);
+      }
+    } else {
+      setErrorMessage('That username is already taken, please try another');
     }
   };
 
   useEffect(() => {
-    document.title = 'Login - Instagram';
+    document.title = 'SignUp - Instagram';
   }, []);
 
   return (
@@ -49,7 +77,23 @@ const Login = () => {
             <p className='mb-4 text-xs text-red-primary'>{errorMessage}</p>
           )}
 
-          <form onSubmit={handleLogin} method='POST'>
+          <form onSubmit={handleSignUp} method='POST'>
+            <input
+              aria-label='Enter your Username'
+              type='text'
+              placeholder='Username'
+              className='w-full h-2 px-4 py-5 mb-2 mr-3 text-sm border rounded text-gray-base border-gray-primary'
+              onChange={({ target }) => setUsername(target.value)}
+              value={username}
+            />
+            <input
+              aria-label='Enter your Fullname'
+              type='text'
+              placeholder='Full Name'
+              className='w-full h-2 px-4 py-5 mb-2 mr-3 text-sm border rounded text-gray-base border-gray-primary'
+              onChange={({ target }) => setFullName(target.value)}
+              value={fullName}
+            />
             <input
               aria-label='Enter your Email address'
               type='text'
@@ -74,17 +118,14 @@ const Login = () => {
                 isInvalid && 'opacity-50'
               }`}
             >
-              Log In
+              Sign Up
             </button>
           </form>
         </div>
         <div className='flex flex-col items-center justify-center w-full p-4 bg-white border rounded border-gray-primary'>
           <p className='text-sm'>
-            Don&apos;t have an account?
-            <Link
-              to={ROUTES.SIGN_UP}
-              className='ml-1 font-bold text-blue-medium'
-            >
+            Have an account?
+            <Link to={ROUTES.LOGIN} className='ml-1 font-bold text-blue-medium'>
               Sign Up
             </Link>
           </p>
@@ -94,4 +135,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default SignUp;
